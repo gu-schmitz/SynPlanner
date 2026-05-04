@@ -97,7 +97,10 @@ class RDKitScore:
                 return 0
 
             mean_score = total / len(node.precursors_to_expand)
-            node_value = 1.0 / (1.0 + math.exp(-mean_score / 10.0))  # Sigmoid to bound to (0, 1)
+            node_value = 1.0 / (1.0 + math.exp(-mean_score / 50.0))  
+            # Syba's practical range is ~-200 (HS) to +200 (ES)
+            # With divisor 50, unfeasable score of -200 is mapped to ~0.018 
+            # and very feasable score of 200 is mapped to 1 - 0.018 = 0.982
             return node_value
 
         elif self.score_function == "heavyAtomCount":
