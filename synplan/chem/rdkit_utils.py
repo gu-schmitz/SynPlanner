@@ -5,8 +5,6 @@ from rdkit.Contrib.SA_Score import sascorer
 
 RDLogger.DisableLog("rdApp.*")
 
-# gu starts here
-
 import math
 
 _SCSCORE_MODEL = None
@@ -27,9 +25,6 @@ def _get_syba_model():
         _SYBA_MODEL = SybaClassifier()
         _SYBA_MODEL.fitDefaultScore()
     return _SYBA_MODEL
-
-
-# gu ends here
 
 class RDKitScore:
     """Node scoring function."""
@@ -65,7 +60,6 @@ class RDKitScore:
                 node_value = 1.0
 
             return node_value
-# gu starts here
 
         elif self.score_function == "scscore":
             model = _get_scscore_model()
@@ -105,9 +99,6 @@ class RDKitScore:
             mean_score = total / len(node.precursors_to_expand)
             node_value = 1.0 / (1.0 + math.exp(-mean_score / 10.0))  # Sigmoid to bound to (0, 1)
             return node_value
-
-# gu ends here
-
 
         elif self.score_function == "heavyAtomCount":
             totalHeavy = 0
@@ -161,8 +152,6 @@ class RDKitScore:
                 node_value = 1.0
 
             return node_value
-        
-        # gu starts here
 
         elif self.score_function == "heavyatomsXsascore":
             total = 0.0
@@ -239,8 +228,6 @@ class RDKitScore:
                 node_value = 1.0
 
             return node_value
-
-        # gu ends here
 
         elif self.score_function == "WxWxSAS":
             total = 0.0
