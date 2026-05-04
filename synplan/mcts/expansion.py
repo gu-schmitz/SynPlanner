@@ -206,20 +206,22 @@ class PolicyNetworkFunction:
 
 
 class CombinedPolicyNetworkFunction:
-    """Combined policy function that adds filtering and ranking logits.
+    """Combined policy function that merges filtering and ranking networks.
 
-    Combines filtering and ranking policies by weighted addition of logits:
+    Supports two combination modes depending on ``filtering_threshold``:
+
+    **Hard-veto mode** (``filtering_threshold > 0``):
+        1. sigmoid(filtering_logits) >= threshold  →  rule kept
+        2. sigmoid(filtering_logits) <  threshold  →  rule vetoed (-inf)
+        3. softmax(ranking_logits / temperature) over surviving rules
+
+    **Additive mode** (``filtering_threshold = 0`` or ``None``):
         combined_logits = filtering_logits + ranking_weight * ranking_logits
-        combined_probs = softmax(combined_logits / temperature)
-
-    Both networks output raw logits (before sigmoid/softmax). The weighting
-    allows controlling the balance between:
-    - Filtering: "Is this rule applicable?" (trained on multi-label applicability)
-    - Ranking: "Is this rule likely to work?" (trained on actual reactions)
+        combined_probs  = softmax(combined_logits / temperature)
 
     Parameters:
-    - ranking_weight > 1.0: More bias toward ranking (better feasibility)
-    - ranking_weight < 1.0: More bias toward filtering (more exploration)
+    - ranking_weight: Weight for ranking logits in additive mode.
+    - filtering_threshold: Hard veto threshold (0 = additive mode).
     - temperature > 1.0: Softer distribution (more exploration)
     - temperature < 1.0: Sharper distribution (more exploitation)
     """
@@ -232,6 +234,7 @@ class CombinedPolicyNetworkFunction:
         rule_prob_threshold: float = 0.0,
         ranking_weight: float = 1.0,
         temperature: float = 1.0,
+        filtering_threshold: float = 0.5,
     ) -> None:
         """Initializes the combined policy function with both filtering and ranking networks.
 
@@ -239,12 +242,13 @@ class CombinedPolicyNetworkFunction:
         :param ranking_config: Configuration for the ranking policy network.
         :param top_rules: Number of top rules to return.
         :param rule_prob_threshold: Minimum probability threshold for returning a rule.
-        :param ranking_weight: Weight for ranking logits (default 1.0).
-            Values > 1.0 give more weight to ranking (feasibility).
-            Values < 1.0 give more weight to filtering (applicability).
+        :param ranking_weight: Weight for ranking logits in additive mode (default 1.0).
         :param temperature: Temperature for softmax (default 1.0).
             Values > 1.0 produce softer distributions (more exploration).
             Values < 1.0 produce sharper distributions (more exploitation).
+        :param filtering_threshold: Hard veto threshold on sigmoid(filtering_logits).
+            Rules with filtering probability below this are vetoed before
+            ranking softmax. Set to 0 or None for additive mode. Default 0.5.
         """
         if filtering_config.policy_type != "filtering":
             raise ValueError(
@@ -261,6 +265,7 @@ class CombinedPolicyNetworkFunction:
         self.rule_prob_threshold = rule_prob_threshold
         self.ranking_weight = ranking_weight
         self.temperature = temperature
+        self.filtering_threshold = filtering_threshold
 
     @property
     def n_rules(self) -> int:
@@ -280,9 +285,18 @@ class CombinedPolicyNetworkFunction:
             )
 
     def _get_combined_probs(self, precursor: Precursor) -> torch.Tensor | None:
-        """Compute combined probabilities by weighted addition of logits.
+        """Compute combined probabilities from filtering and ranking networks.
 
-        Formula: softmax((filtering_logits + ranking_weight * ranking_logits) / temperature)
+        Two modes depending on ``filtering_threshold``:
+
+        **Hard-veto mode** (filtering_threshold > 0):
+            1. sigmoid(filtering_logits) >= threshold  →  rule kept
+            2. sigmoid(filtering_logits) <  threshold  →  rule vetoed (-inf)
+            3. softmax(ranking_logits / temperature) over surviving rules
+
+        **Additive mode** (filtering_threshold is None or 0):
+            combined = filtering_logits + ranking_weight * ranking_logits
+            softmax(combined / temperature)
 
         :param precursor: The current precursor.
         :return: Combined probability tensor or None if inference fails.
@@ -294,11 +308,17 @@ class CombinedPolicyNetworkFunction:
         if filtering_logits is None or ranking_logits is None:
             return None
 
-        # Weighted combination of logits
-        combined_logits = filtering_logits + self.ranking_weight * ranking_logits
-
-        # Temperature-scaled softmax
-        return torch.softmax(combined_logits / self.temperature, dim=-1)
+        if self.filtering_threshold:
+            # Hard-veto mode: discard rules below the applicability threshold
+            filtering_probs = torch.sigmoid(filtering_logits)
+            mask = filtering_probs >= self.filtering_threshold
+            masked_ranking_logits = ranking_logits.clone()
+            masked_ranking_logits[~mask] = float('-inf')
+            return torch.softmax(masked_ranking_logits / self.temperature, dim=-1)
+        else:
+            # Additive mode: weighted sum of logits
+            combined = filtering_logits + self.ranking_weight * ranking_logits
+            return torch.softmax(combined / self.temperature, dim=-1)
 
     def _predict_rules_common(
         self, precursor: Precursor, n_rules: int

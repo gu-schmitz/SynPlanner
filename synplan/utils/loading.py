@@ -513,15 +513,13 @@ def load_combined_policy_function(
     rule_prob_threshold: float = 0.0,
     ranking_weight: float = 1.0,
     temperature: float = 1.0,
+    filtering_threshold: float = 0.5,
 ) -> "CombinedPolicyNetworkFunction":
     """Factory function to create CombinedPolicyNetworkFunction with flexible configuration.
 
-    Combines filtering and ranking policies by weighted addition of logits:
-        combined_logits = filtering_logits + ranking_weight * ranking_logits
-        combined_probs = softmax(combined_logits / temperature)
-
-    The filtering policy provides applicability scores (trained on multi-label applicability).
-    The ranking policy provides feasibility scores (trained on actual reactions).
+    Supports two modes depending on filtering_threshold:
+    - Hard-veto (filtering_threshold > 0): filtering gates rules, ranking scores survivors.
+    - Additive (filtering_threshold = 0): weighted logit sum with ranking_weight.
 
     :param combined_config: CombinedPolicyConfig or dict with all parameters.
     :param filtering_config: PolicyNetworkConfig or dict for filtering policy.
@@ -530,10 +528,9 @@ def load_combined_policy_function(
     :param ranking_weights_path: Direct path to ranking weights (shortcut).
     :param top_rules: Number of top rules to return.
     :param rule_prob_threshold: Minimum probability threshold for returning a rule.
-    :param ranking_weight: Weight for ranking logits (default 1.0).
-        Values > 1.0 give more weight to ranking (feasibility).
+    :param ranking_weight: Weight for ranking logits in additive mode (default 1.0).
     :param temperature: Temperature for softmax (default 1.0).
-        Values > 1.0 produce softer distributions (more exploration).
+    :param filtering_threshold: Hard veto threshold (default 0.5). Set to 0 for additive mode.
     :return: CombinedPolicyNetworkFunction ready for use in tree search.
 
     Examples:
@@ -569,6 +566,7 @@ def load_combined_policy_function(
         rule_prob_threshold = combined_config.rule_prob_threshold
         ranking_weight = combined_config.ranking_weight
         temperature = combined_config.temperature
+        filtering_threshold = combined_config.filtering_threshold
         filtering_config = PolicyNetworkConfig(
             weights_path=filtering_weights_path, policy_type="filtering"
         )
@@ -582,6 +580,7 @@ def load_combined_policy_function(
             rule_prob_threshold=rule_prob_threshold,
             ranking_weight=ranking_weight,
             temperature=temperature,
+            filtering_threshold=filtering_threshold,
         )
 
     # Build filtering config
@@ -625,6 +624,7 @@ def load_combined_policy_function(
         rule_prob_threshold=rule_prob_threshold,
         ranking_weight=ranking_weight,
         temperature=temperature,
+        filtering_threshold=filtering_threshold,
     )
 
 

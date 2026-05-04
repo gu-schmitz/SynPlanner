@@ -37,6 +37,10 @@ cpu = ["torch>=2.0"]
 cu126 = ["torch>=2.0"]
 cu128 = ["torch>=2.0"]
 
+# Extras for heuristics benchmark
+scscore = ["scscore @ git+https://github.com/connorcoley/scscore.git"]
+syba = ["syba>=1.0"]
+
 [dependency-groups]
 dev = [
   "pytest>=7.4.3,<8",

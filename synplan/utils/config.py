@@ -403,12 +403,16 @@ class RDKitEvaluationConfig(BaseConfigModel):
     Uses molecular descriptors like SA score, molecular weight, etc.
 
     :param score_function: Name of the scoring function to use.
-        Options: "sascore", "weight", "heavyAtomCount", "weightXsascore", "WxWxSAS".
+        Options: "sascore", "scscore", "syba", "weight", "heavyAtomCount", 
+        "weightXsascore", "heavyatomsXweight", "heavyatomsXsascore", "heavyatomsXscscore", 
+        "sascoreXscscore", "WxWxSAS".
     :param normalize: Whether to normalize scores to [0, 1].
     """
 
     score_function: Literal[
-        "sascore", "weight", "heavyAtomCount", "weightXsascore", "WxWxSAS"
+        "sascore", "scscore", "syba", "weight", "heavyAtomCount", 
+        "weightXsascore", "heavyatomsXweight", "heavyatomsXsascore", "heavyatomsXscscore", 
+        "sascoreXscscore", "WxWxSAS"
     ] = "sascore"
     normalize: bool = False
 
@@ -438,21 +442,19 @@ class RandomEvaluationConfig(BaseConfigModel):
 class CombinedPolicyConfig(BaseConfigModel):
     """Configuration for combined filtering + ranking policy.
 
-    Combines filtering and ranking policies by weighted addition of logits:
-        combined_logits = filtering_logits + ranking_weight * ranking_logits
-        combined_probs = softmax(combined_logits / temperature)
-
-    The filtering policy provides applicability scores (trained on multi-label applicability).
-    The ranking policy provides feasibility scores (trained on actual reactions).
+    Supports two modes:
+    - **Hard-veto** (filtering_threshold > 0): filtering acts as binary gate,
+      ranking scores surviving rules via softmax(ranking_logits / temperature).
+    - **Additive** (filtering_threshold = 0): weighted logit sum
+      softmax((filtering_logits + ranking_weight * ranking_logits) / temperature).
 
     :param filtering_weights_path: Path to the filtering policy network weights.
     :param ranking_weights_path: Path to the ranking policy network weights.
     :param top_rules: Number of top rules to return.
     :param rule_prob_threshold: Minimum probability threshold for returning a rule.
-    :param ranking_weight: Weight for ranking logits (default 1.0).
-        Values > 1.0 give more weight to ranking (feasibility).
+    :param ranking_weight: Weight for ranking logits in additive mode (default 1.0).
     :param temperature: Temperature for softmax (default 1.0).
-        Values > 1.0 produce softer distributions (more exploration).
+    :param filtering_threshold: Hard veto threshold (default 0.5). Set to 0 for additive mode.
     """
 
     filtering_weights_path: str | Path
@@ -461,3 +463,4 @@ class CombinedPolicyConfig(BaseConfigModel):
     rule_prob_threshold: float = 0.0
     ranking_weight: float = Field(default=1.0, gt=0.0)
     temperature: float = Field(default=1.0, gt=0.0)
+    filtering_threshold: float = Field(default=0.5, ge=0.0, lt=1.0)
