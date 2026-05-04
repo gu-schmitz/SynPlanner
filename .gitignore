@@ -152,7 +152,9 @@ tutorials/planning_with_downloaded_data/
 tutorials/protection_scoring_results/
 uspto/
 presets/
-*.smi
+results.smi
+solved.smi
+unsolved.smi
 *.ckpt
 *.tsv
 local/
